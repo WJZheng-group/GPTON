@@ -30,7 +30,7 @@ Here we provide an implementation of GPTON in trl. The repository is organized a
 - You can run `./evaluation.py` to generate gene set summaries. Predictions are stored in `output/eval_table.csv`.
 ## Step 5 Map back to GO terms
 - You can run `./gene_desc_match_topk.py` to get top k GO terms for each gene set. Results are stored in `output/eval_table_match_back.csv`.
-## Step 5 Map back to GO terms
+## Step 6 Map back to GO terms
 - You can run `./literature_search.py` to extract the most related PubMed abstracts for the generated summary of a given gene set.
 
 # Contact
