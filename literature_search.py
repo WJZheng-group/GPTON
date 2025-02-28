@@ -1,5 +1,6 @@
 import os
 import csv
+import pickle
 import pandas as pd
 import numpy as np
 import torch
@@ -15,26 +16,11 @@ medcpt_model.eval()
 GENE2PUBMED = pd.read_csv('example_data/gene2pubmed_10_29_24', delimiter='\t')
 GENE2PUBMED = GENE2PUBMED.groupby('PubMed_ID').filter(lambda x: len(x) <= 50)
 
-GENE_INFO_MM = pd.read_csv('example_data/Mus_musculus.gene_info', delimiter='\t')
 GENE_INFO_HS = pd.read_csv('example_data/Homo_sapiens.gene_info', delimiter='\t')
 
 PMID2ABSTRACT = pd.read_csv('example_data/PubMed_id_abstract_dictionary.csv') # PMID vs abstract table
-print('Finish loading!!!')
 
 def find_relevant_pmid(gene_info_df, gene2pubmed_df, pm_gene_dict, embed_dict, genelist, gpton_summ):
-    # with open(result_table_path, 'w', newline="") as f:
-    #     writer = csv.writer(f, delimiter='\t')
-    #     writer.writerow(['genelist', 'GPTON_summ', 'pmid_count', 'sim_score', 'pmid', 'title'])
-
-    #     gen_emb = get_term_embeddings(gpton_summ, medcpt_model, medcpt_tokenizer).squeeze()
-        
-    #     filtered_pmidlist, pmid_count = get_pmidlist(genelist, gene_info_df, gene2pubmed_df, pm_gene_dict)
-    #     retrieved_pmids, retrieved_scores, retrieved_titles = retrieve_top_k(filtered_pmidlist, gen_emb, embed_dict, pmid2abstract_df)
-    #     writer.writerow([','.join(genelist), gpton_summ, pmid_count, retrieved_scores, retrieved_pmids, retrieved_titles])
-
-    # result_df = pd.read_csv(result_table_path, delimiter='\t')
-    # #tofasta(result_df, fasta_path)
-
     gen_emb = get_term_embeddings(gpton_summ).squeeze()
     filtered_pmidlist, pmid_count = get_pmidlist(genelist, gene_info_df, gene2pubmed_df, pm_gene_dict)
     retrieved_pmids, retrieved_scores, retrieved_titles = retrieve_top_k(filtered_pmidlist, gen_emb, embed_dict)
@@ -47,12 +33,6 @@ def find_relevant_pmid(gene_info_df, gene2pubmed_df, pm_gene_dict, embed_dict, g
     return result_df.values.tolist()
 
 def get_term_embeddings(term, max_length=64, batch_size=32):
-    # Load the model and tokenizer
-    #model = AutoModel.from_pretrained(model_name)
-    #tokenizer = AutoTokenizer.from_pretrained(model_name)
-    #model.eval()
-
-    #all_embeds = []
     max_length=64
     with torch.no_grad():
         # Process terms in batches
@@ -66,12 +46,6 @@ def get_term_embeddings(term, max_length=64, batch_size=32):
         
         # Encode the terms (use the [CLS] last hidden states as the representations)
         embeds = medcpt_model(**encoded).last_hidden_state[:, 0, :]
-
-    #print(embeds)
-
-    # data = {
-    #     "embeds": embeds.numpy().tolist()
-    # }
 
     return embeds.numpy()
 
@@ -98,8 +72,6 @@ def retrieve_top_k(pmidlist, gen_emb, embed_dict):
     pmids, cos_sims = zip(*cos_sims)
 
     k = 3
-
-    #top_k_idx = np.argsort(cos_sims)[::-1]
     top_k_idx = np.argsort(cos_sims)[-k:][::-1]
 
     top_k_pmids = [pmids[idx] for idx in top_k_idx]
@@ -131,12 +103,8 @@ def matching_pubmed(genelist, gpton_summ, taxid):
     
     genelist = genelist.split(',')
 
-    if taxid == 10090:
-        gene_info_df = GENE_INFO_MM
-        embed_dict_dir = 'example_data/mmgene_pubmed_embed_dict_filterGreater50.pth'
-    else:
-        gene_info_df = GENE_INFO_HS
-        embed_dict_dir = 'example_data/hsgene_pubmed_embed_dict_filterGreater50.pth'
+    gene_info_df = GENE_INFO_HS
+    embed_dict_dir = 'example_data/hsgene_pubmed_embed_dict_filterGreater50.pkl'
 
     gene_info_df = gene_info_df[gene_info_df['#tax_id'] == taxid]
     print('Finished loading gene_info')
@@ -149,23 +117,28 @@ def matching_pubmed(genelist, gpton_summ, taxid):
     for id, df in specie_gene2pubmed_df.groupby('PubMed_ID')['GeneID']:
         pm_gene_dict[id] = df.to_list()
 
-    embed_dict = torch.load(embed_dict_dir)
+    with open(embed_dict_dir, 'rb') as file:
+        # Load the dictionary from the pickle file
+        embed_dict = pickle.load(file)
     print('Finished loading saved embedding dictionary')
 
-    #result_table_path = os.path.join(cluster_dir, 'pubmed_search_result.tsv') # output result table directory
     result_list = find_relevant_pmid(gene_info_df, specie_gene2pubmed_df, pm_gene_dict, embed_dict, genelist, gpton_summ)
 
     return result_list
 
 if __name__ == '__main__':
-    genelist = 'CYC1,UQCRB,UQCRC1,UQCR10,CYCS,UQCC3,UQCRQ,UQCRHL,UQCR11,CYTB,UQCRH,UQCRC2,UQCRFS1' # Input gene list in string format separated by ','
-    gpton_summ = 'the transfer of electrons from ubiquinol to cytochrome c, a crucial step in the electron transport chain that generates ATP in cellular respiration.' # After removing common words at the beggining. 
+
     taxid = 9606 # Taxonomy ID of species
+
+    genelist = 'MEGF10,SDC1,WNT10B,SOX15' # A sample input gene list
+    # A generated narrative for the input genelist
+    gpton_summ = 'the formation and maturation of myoblasts, which are precursor cells that eventually develop into muscle fibers.'
+    
     result_list = matching_pubmed(genelist, gpton_summ, taxid)
 
     cluster_dir = 'example_data/' # Output file directory
 
-    #with open(cluster_dir+'pubmed_search_result.tsv', 'w') as f:
+    #with open('example_data/output/pubmed_search_result.tsv', 'w') as f:
     #    for line in result_list:
     #        f.write('\t'.join([str(x) for x in line]))
     #        f.write('\n')
