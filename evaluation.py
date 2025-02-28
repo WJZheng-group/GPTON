@@ -70,6 +70,7 @@ def eval_table(output_text, reference):
 
 
 for index, rows in test_data.iterrows():
+    genelist = rows['genelist']
     prompt = rows['input']
     reference = rows['output']
     input_tokens = tokenizer.apply_chat_template(prompt, tokenize=True, add_generation_prompt=True, return_tensors="pt").to('cuda')
@@ -99,6 +100,7 @@ for index, rows in test_data.iterrows():
 
             metrics_table.append(
                     {
+                        'genelist': genelist,
                         'reference_summ': reference,
                         'generated_summ': output_text,
                         'rouge_1_f': rouge_1,
